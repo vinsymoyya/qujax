@@ -194,7 +194,8 @@ def get_statetensor_to_sampled_expectation_func(
         """
         measure_probs = jnp.abs(statetensor) ** 2
         sampled_probs = sample_probs(measure_probs, random_key, n_samps)
-        iweights = jnp.sqrt(sampled_probs / measure_probs)
+        safe_probs = jnp.where(measure_probs == 0, 1, measure_probs)
+        iweights = jnp.sqrt(sampled_probs / safe_probs)
         return statetensor_to_expectation_func(statetensor * iweights)
 
     return statetensor_to_sampled_expectation_func
@@ -221,10 +222,11 @@ def sample_probs(
         shape=(n_samps,),
         p=measure_probs_flat,
     )
-    sampled_probs = fori_loop(
+    sampled_counts = fori_loop(
         0,
         n_samps,
-        lambda i, sv: sv.at[sampled_integers[i]].add(1 / n_samps),
-        jnp.zeros_like(measure_probs_flat),
+        lambda i, sv: sv.at[sampled_integers[i]].add(1),
+        jnp.zeros_like(measure_probs_flat, dtype=int),
     )
+    sampled_probs = (sampled_counts / n_samps).astype(measure_probs.dtype)
     return sampled_probs.reshape(measure_probs.shape)
